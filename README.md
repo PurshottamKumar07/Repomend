@@ -1,1 +1,2 @@
-This is the frontend side of this project 
+this is the frontend of the project it is deployed on : 
+status : not available yet!
