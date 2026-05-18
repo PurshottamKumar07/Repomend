@@ -1,9 +1,11 @@
 from fastapi import FastAPI , HTTPException
 from ingest import ingest_data
-from models import create_tables
 from dotenv import load_dotenv
 from os import getenv
 from pydantic import BaseModel
+from models import create_tables
+from db import get_conn
+from typing import Dict
 
 class Projects(BaseModel):
     id : int
@@ -20,30 +22,50 @@ git_api=getenv("GITHUB_TOKEN")
 
 app=FastAPI()
 
-# Create DB tables on startup
-create_tables()
 
-@app.get("/ingest")
+class PreferenceRequest(BaseModel):
+    preferences: Dict[str, int]
+
+@app.post("/preferences")
+async def save_preferences(data: PreferenceRequest):
+    print(data.preferences)
+    return {
+        "received": data.preferences
+    }
+    
 def ingest():
-    try:
-        ingest_data()
-        return {"message": "Data ingested successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    create_tables()
+    ingest_data()
+    return {"message": "Data ingested successfully"}    
 
 @app.get("/")
 def read_root():
     return {"message": "Hello everynyan"}
 
+@app.get("/data")
+def get_feed(limit: int = 10, offset: int = 0):
+    conn = get_conn()
+    cursor = conn.cursor()
 
-@app.get("/projects")
-def product_list():
-    return project
+    cursor.execute("""
+        SELECT id, repo_name, description, stars, forks, language, score
+        FROM projects
+        ORDER BY score DESC
+        LIMIT ? OFFSET ?
+    """, (limit, offset))
 
+    rows = cursor.fetchall()
+    conn.close()
 
-@app.get("/product/{id}")
-def get_a_single_product(id:int):
-    for product in project:
-        if product.id==id:
-            return product
-    raise HTTPException(status_code=404,detail="Product not found!")
+    return [
+        {
+            "id": r[0],
+            "title": r[1],
+            "description": r[2] or "No description provided.",
+            "stars": r[3],
+            "forks": r[4],
+            "language": r[5] or "Unknown",
+            "score": r[6]
+        }
+        for r in rows
+    ]

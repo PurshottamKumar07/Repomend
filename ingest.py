@@ -15,7 +15,6 @@ KEYWORD_SCORES = {
     "frontend": -0.5
 }
 
-
 def calculate_score(repo):
     score = 0
 
