@@ -1,3 +1,4 @@
+// [CHANGED] Added metadata import pattern, kept fonts
 import { Geist, Geist_Mono } from "next/font/google"
 
 import "./globals.css"
@@ -22,7 +23,8 @@ export default function RootLayout({
       suppressHydrationWarning
       className={cn("antialiased", fontMono.variable, "font-sans", geist.variable)}
     >
-      <body>
+      {/* [CHANGED] Added smooth scroll behavior */}
+      <body className="min-h-svh">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

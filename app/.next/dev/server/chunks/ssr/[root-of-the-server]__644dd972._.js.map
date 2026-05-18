@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 18, "column": 0}, "map": {"version":3,"sources":["file:///home/purshottam/Desktop/api/front/next-app/app/page.tsx"],"sourcesContent":["import { Button } from \"@/components/ui/button\"\n\nexport default function Page() {\n  return (\n    <div className=\"flex min-h-svh p-6\">\n      <div className=\"flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose\">\n        <div>\n          \n        </div>\n        <div className=\"font-mono text-xs text-muted-foreground\">\n        </div>\n      </div>\n    </div>\n  )\n}\n"],"names":[],"mappings":";;;;;;AAEe,SAAS;IACtB,qBACE,wRAAC;QAAI,WAAU;kBACb,cAAA,wRAAC;YAAI,WAAU;;8BACb,wRAAC;;;;;8BAGD,wRAAC;oBAAI,WAAU;;;;;;;;;;;;;;;;;AAKvB"}}]
+}

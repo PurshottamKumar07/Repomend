@@ -1,111 +1,117 @@
 "use client";
-import React, { useState } from "react"
+// [CHANGED] Complete container redesign — glassmorphism panels, gradient borders, animations
+import React, { useState, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import Feed, { Project } from "./feed"
-
-const INITIAL_PROJECTs: Project[] = [
-    {
-        id: 1,
-        title: "Project Alpha",
-        author: "Purshottam",
-        topics: "Python , Javascript , React , Nodejs",
-        description: "Lorem ipsum dolor praesentium aliquid consequatur velit hic."
-    },
-    {
-        id: 2,
-        title: "Repomend Platform",
-        author: "Jane Doe",
-        topics: "Next.js , Tailwind CSS , MongoDB",
-        description: "A fast semantic recommendation platform."
-    },
-    {
-        id: 3,
-        title: "UI Component Library",
-        author: "Alex Smith",
-        topics: "React , Framer Motion",
-        description: "Beautiful animated components for React web apps."
-    },
-    {
-        id: 4,
-        title: "E-Commerce Dashboard",
-        author: "Sarah Jones",
-        topics: "Vue.js , Vuex , Tailwind CSS",
-        description: "Interactive analytics dashboard for online merchants."
-    },
-    {
-        id: 5,
-        title: "Crypto Tracker app",
-        author: "Michael Brown",
-        topics: "React Native , Redux , Chart.js",
-        description: "Real-time cryptocurrency price tracking mobile application."
-    },
-    {
-        id: 6,
-        title: "Fitness Companion app",
-        author: "Emily Clark",
-        topics: "Flutter , Dart , Firebase",
-        description: "Personalized workout and diet tracking platform."
-    },
-    {
-        id: 7,
-        title: "Code Snippet Manager",
-        author: "David Wilson",
-        topics: "Electron , React , SQLite",
-        description: "Desktop app to store, organize, and share code snippets."
-    },
-    {
-        id: 8,
-        title: "AI Image Generator",
-        author: "Sophia Lee",
-        topics: "Python , PyTorch , FastApi , React",
-        description: "Create stunning artwork from text prompts using deep learning."
-    },
-    {
-        id: 9,
-        title: "Task Management Tool",
-        author: "James Taylor",
-        topics: "Angular , TypeScript , Node.js",
-        description: "Collaborative project management and task tracking solution."
-    },
-    {
-        id: 10,
-        title: "Weather Forecast API",
-        author: "Olivia Martinez",
-        topics: "Go , PostgreSQL , Docker",
-        description: "High-performance REST API for global weather data."
-    }
-];
+import TopicPicker from "./topic-picker"
+import { ThumbsDown, ThumbsUp, RotateCcw, ArrowLeft, ArrowRight, RefreshCw, Loader2 } from "lucide-react"
 
 export default function Container({ className }: React.HTMLAttributes<HTMLDivElement>) {
-    const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTs);
+    // [ADDED] Topic selection state — null means user hasn't chosen yet
+    const [preferences, setPreferences] = useState<Record<string, number> | null>(null);
+    const [projects, setProjects] = useState<Project[]>([]);
+    const [loading, setLoading] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [liked, setLiked] = useState<Project[]>([]);
     const [disliked, setDisliked] = useState<Project[]>([]);
     const [history, setHistory] = useState<{action: 'like' | 'dislike', project: Project}[]>([]);
     const [viewingProject, setViewingProject] = useState<Project | null>(null);
 
+    // [ADDED] Handle topic selection completion
+    const handleTopicComplete = useCallback((prefs: Record<string, number>) => {
+        setPreferences(prefs);
+        // Store preferences in localStorage for persistence
+        try {
+            localStorage.setItem("repomend_preferences", JSON.stringify(prefs));
+        } catch {}
+    }, []);
+    // Helper: adjust topic scores based on like (+15) or dislike (-5).
+    const updateTopicScores = (proj: Project, delta: number) => {
+      if (!preferences) return;
+      // Ensure topics is an array of strings
+      const topicsArray: string[] = Array.isArray(proj.topics)
+        ? proj.topics
+        : typeof proj.topics === "string"
+        ? proj.topics.split(',').map(t => t.trim())
+        : [];
+      const newPrefs = { ...preferences };
+      topicsArray.forEach(topic => {
+        const current = newPrefs[topic] ?? 0;
+        const updated = current + delta;
+        newPrefs[topic] = updated < 0 ? 0 : updated; // enforce minimum 0
+      });
+      setPreferences(newPrefs);
+      try {
+        localStorage.setItem("repomend_preferences", JSON.stringify(newPrefs));
+      } catch {}
+    };
+    // [ADDED] Check localStorage on mount
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem("repomend_preferences");
+            if (saved) {
+                setPreferences(JSON.parse(saved));
+            }
+        } catch {}
+    }, []);
+
+    const fetchProjects = useCallback(async () => {
+        try {
+            setLoading(true);
+            const response = await fetch('/api/projects?limit=50');
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                const mappedProjects: Project[] = data.map((item: any) => ({
+                    id: item.id,
+                    title: item.title,
+                    description: item.description,
+                    stars: item.stars,
+                    forks: item.forks,
+                    topics: item.language,
+                }));
+                setProjects(mappedProjects);
+            }
+        } catch (error) {
+            console.error("Failed to fetch projects:", error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
     const currentProject = projects[currentIndex] || null;
     const projectToDisplay = viewingProject || currentProject;
 
     const handleLike = () => {
-        if (viewingProject) {
-            if (disliked.some(p => p.id === viewingProject.id)) {
-                setDisliked(disliked.filter(p => p.id !== viewingProject.id));
-                setLiked([...liked, viewingProject]);
-                setHistory([...history, { action: 'like', project: viewingProject }]);
-            }
-            setViewingProject(null);
-            return;
+    if (viewingProject) {
+        updateTopicScores(viewingProject, 15);
+
+        if (disliked.some(p => p.id === viewingProject.id)) {
+            setDisliked(disliked.filter(p => p.id !== viewingProject.id));
+            setLiked([...liked, viewingProject]);
+            setHistory([...history, { action: 'like', project: viewingProject }]);
         }
 
-        if (!currentProject) return;
-        setLiked([...liked, currentProject]);
-        setHistory([...history, { action: 'like', project: currentProject }]);
-        setCurrentIndex(currentIndex + 1);
-    };
+        setViewingProject(null);
+        return;
+    }
 
+    if (!currentProject) return;
+
+    updateTopicScores(currentProject, 15);
+
+    setLiked([...liked, currentProject]);
+    setHistory([...history, { action: 'like', project: currentProject }]);
+    setCurrentIndex(currentIndex + 1);
+};
     const handleDislike = () => {
         if (viewingProject) {
+            // Reduce topics of disliked project (-5, floor at 0)
+            updateTopicScores(viewingProject, -5);
             if (liked.some(p => p.id === viewingProject.id)) {
                 setLiked(liked.filter(p => p.id !== viewingProject.id));
                 setDisliked([...disliked, viewingProject]);
@@ -114,76 +120,182 @@ export default function Container({ className }: React.HTMLAttributes<HTMLDivEle
             setViewingProject(null);
             return;
         }
-
         if (!currentProject) return;
+        // Reduce topics of disliked project (-5, floor at 0)
+        updateTopicScores(currentProject, -5);
         setDisliked([...disliked, currentProject]);
         setHistory([...history, { action: 'dislike', project: currentProject }]);
         setCurrentIndex(currentIndex + 1);
     };
 
+
     const handleUndo = () => {
         if (history.length === 0) return;
         const lastAction = history[history.length - 1];
         setHistory(history.slice(0, -1));
-        
         if (lastAction.action === 'like') {
             setLiked(liked.filter(p => p.id !== lastAction.project.id));
         } else {
             setDisliked(disliked.filter(p => p.id !== lastAction.project.id));
         }
-        
         setCurrentIndex(currentIndex - 1);
     };
 
+    // [ADDED] Progress indicator
+    const progress = projects.length > 0 ? Math.round((currentIndex / projects.length) * 100) : 0;
+
+    // [ADDED] Show topic picker if user hasn't selected preferences yet
+    if (preferences === null) {
+        return <TopicPicker onComplete={handleTopicComplete} />;
+    }
+
     return (
-        <div className="w-full flex justify-between flex-row max-w-full flex-col lg:flex-row text-base gap-10 leading-loose p-6 mt-5">
-            <div className="w-full h-64 sm:h-72 lg:w-96 lg:h-96 bg-gray-800 shadow-md border border-red-900 p-6 flex flex-col rounded-lg">
-                <div className="flex justify-center text-xl font-mono ml-4 font-bold">Disliked</div>
-                <div className={cn("w-full h-full flex flex-col items-center justify-start overflow-y-auto bg-black text-white rounded-lg shadow-md p-4 gap-2", className)}>
-                    {disliked.length === 0 && <span className="opacity-50 mt-10">Empty</span>}
-                    {disliked.slice(-5).reverse().map(p => (
-                        <div key={p.id} onClick={() => setViewingProject(p)} className="bg-gray-800 hover:bg-gray-700 border border-gray-700 w-full p-2 rounded text-sm text-center truncate cursor-pointer transition-colors">{p.title}</div>
-                    ))}
+        <>
+            {/* [ADDED] Instruction banner — only shows in feed mode */}
+            <div className="w-full border-b border-border/30 bg-muted/30">
+                <div className="container mx-auto flex flex-wrap items-center justify-center gap-6 px-6 py-3">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span className="flex items-center justify-center rounded-md bg-rose-500/10 p-1.5">
+                            <ArrowLeft className="size-3.5 text-rose-400" />
+                        </span>
+                        <span>Click left to <strong className="text-rose-400">skip</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span className="flex items-center justify-center rounded-md bg-blue-500/10 p-1.5">
+                            <RotateCcw className="size-3.5 text-blue-400" />
+                        </span>
+                        <span>Click undo to <strong className="text-blue-400">go back</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span className="flex items-center justify-center rounded-md bg-emerald-500/10 p-1.5">
+                            <ArrowRight className="size-3.5 text-emerald-400" />
+                        </span>
+                        <span>Click right to <strong className="text-emerald-400">save</strong></span>
+                    </div>
                 </div>
-            </div>
-            
-            <div className="w-full h-72 sm:h-80 lg:w-1/2 lg:h-96 xl:w-[50%] bg-gray-900 rounded-lg p-6 relative flex flex-col">
-                <div className={cn("w-full h-full flex items-start justify-start rounded-lg shadow-md overflow-hidden", className)}>
-                    {projectToDisplay ? (
-                        <Feed project={projectToDisplay} onLike={handleLike} onDislike={handleDislike} />
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 font-mono">
-                            No more projects to review!
-                        </div>
-                    )}
-                </div>
-                
-                {viewingProject ? (
-                    <button 
-                        onClick={() => setViewingProject(null)}
-                        className="absolute bottom-4 right-4 bg-blue-700 hover:bg-blue-600 border border-blue-500 text-white px-4 py-1.5 rounded-md text-sm font-semibold transition-colors shadow-lg z-10"
-                    >
-                        Back to Queue
-                    </button>
-                ) : history.length > 0 && (
-                    <button 
-                        onClick={handleUndo}
-                        className="absolute bottom-4 right-4 bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white px-4 py-1.5 rounded-md text-sm font-semibold transition-colors shadow-lg z-10"
-                    >
-                        Undo
-                    </button>
-                )}
             </div>
 
-            <div className="w-full h-64 sm:h-72 lg:w-96 lg:h-96 bg-gray-800 shadow-md border border-green-900 p-6 flex flex-col rounded-lg">
-                <div className="flex justify-center text-xl font-mono ml-4 font-bold"> Liked</div>
-                <div className={cn("w-full h-full flex flex-col items-center justify-start overflow-y-auto bg-black text-white rounded-lg shadow-md p-4 gap-2", className)}>
-                    {liked.length === 0 && <span className="opacity-50 mt-10">Empty</span>}
-                    {liked.slice(-5).reverse().map(p => (
-                        <div key={p.id} onClick={() => setViewingProject(p)} className="bg-gray-800 hover:bg-gray-700 border border-gray-700 w-full p-2 rounded text-sm text-center truncate cursor-pointer transition-colors">{p.title}</div>
-                    ))}
-                </div>
+            {/* [CHANGED] Main content area with better spacing */}
+            <main className="flex-1 px-4 py-6 lg:px-8">
+            <div className="w-full flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto">
+
+            <Card className="w-full lg:w-72 xl:w-80 border-rose-500/20 bg-card/50 backdrop-blur-sm shrink-0">
+                <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center justify-between text-base">
+                        <span className="flex items-center gap-2">
+                            <ThumbsDown className="size-4 text-rose-400" />
+                            <span className="text-rose-400">Skipped</span>
+                        </span>
+                        {/* [ADDED] Count badge */}
+                        <Badge variant="destructive" className="text-xs">{disliked.length}</Badge>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 min-h-0">
+                    <div className={cn("flex flex-col gap-1.5 max-h-64 lg:max-h-80 overflow-y-auto scrollbar-thin pr-1", className)}>
+                        {disliked.length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-8 opacity-60">Nothing skipped yet</p>
+                        )}
+                        {/* [CHANGED] Better item cards with hover scale */}
+                        {disliked.slice(-8).reverse().map(p => (
+                            <button
+                                key={p.id}
+                                onClick={() => setViewingProject(p)}
+                                className="w-full text-left rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-sm truncate transition-all hover:bg-secondary hover:scale-[1.02] hover:border-rose-500/30"
+                            >
+                                {p.title}
+                            </button>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+            
+            {/* [CHANGED] Center card — main project display with floating animation + gradient border */}
+            <div className="flex-1 min-w-0 flex flex-col gap-3">
+                {/* [ADDED] Progress bar */}
+                {!loading && projects.length > 0 && (
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <div className="flex-1 h-1 rounded-full bg-secondary overflow-hidden">
+                            <div
+                                className="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                        <span>{currentIndex}/{projects.length}</span>
+                    </div>
+                )}
+
+                <Card className="flex-1 min-h-[20rem] sm:min-h-[24rem] lg:min-h-[28rem] border-primary/20 bg-card/50 backdrop-blur-sm relative overflow-hidden">
+                    <CardContent className="h-full p-0">
+                        <div className={cn("w-full h-full", className)}>
+                            {loading ? (
+                                // [CHANGED] Better loading state with spinner
+                                <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                                    <Loader2 className="size-6 animate-spin text-primary" />
+                                    <p className="text-sm font-medium animate-pulse">Discovering repos...</p>
+                                </div>
+                            ) : projectToDisplay ? (
+                                <Feed project={projectToDisplay} onLike={handleLike} onDislike={handleDislike} />
+                            ) : (
+                                // [CHANGED] Better empty state with refresh button
+                                <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
+                                    <p className="text-lg font-medium">All caught up! 🎉</p>
+                                    <p className="text-sm">You&apos;ve reviewed all available projects.</p>
+                                    <Button variant="outline" onClick={() => { setCurrentIndex(0); fetchProjects(); }} className="gap-2">
+                                        <RefreshCw className="size-4" />
+                                        Load More
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+
+                    {/* [CHANGED] Action buttons — pill-shaped with icons, shadcn Button */}
+                    <div className="absolute bottom-3 right-3 flex items-center gap-2 z-10">
+                        {viewingProject ? (
+                            <Button size="sm" variant="outline" onClick={() => setViewingProject(null)} className="gap-1.5 shadow-lg">
+                                <ArrowLeft className="size-3.5" />
+                                Back
+                            </Button>
+                        ) : history.length > 0 && (
+                            <Button size="sm" variant="outline" onClick={handleUndo} className="gap-1.5 shadow-lg">
+                                <RotateCcw className="size-3.5" />
+                                Undo
+                            </Button>
+                        )}
+                    </div>
+                </Card>
             </div>
+
+            {/* [CHANGED] Liked panel — shadcn Card with emerald glow border */}
+            <Card className="w-full lg:w-72 xl:w-80 border-emerald-500/20 bg-card/50 backdrop-blur-sm shrink-0">
+                <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center justify-between text-base">
+                        <span className="flex items-center gap-2">
+                            <ThumbsUp className="size-4 text-emerald-400" />
+                            <span className="text-emerald-400">Saved</span>
+                        </span>
+                        <Badge variant="success" className="text-xs">{liked.length}</Badge>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 min-h-0">
+                    <div className={cn("flex flex-col gap-1.5 max-h-64 lg:max-h-80 overflow-y-auto scrollbar-thin pr-1", className)}>
+                        {liked.length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-8 opacity-60">Nothing saved yet</p>
+                        )}
+                        {liked.slice(-8).reverse().map(p => (
+                            <button
+                                key={p.id}
+                                onClick={() => setViewingProject(p)}
+                                className="w-full text-left rounded-lg border border-border/50 bg-secondary/50 px-3 py-2 text-sm truncate transition-all hover:bg-secondary hover:scale-[1.02] hover:border-emerald-500/30"
+                            >
+                                {p.title}
+                            </button>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
         </div>
+            </main>
+        </>
     )
 }
