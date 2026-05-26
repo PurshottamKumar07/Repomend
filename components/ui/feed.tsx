@@ -10,6 +10,7 @@ export type Project = {
     description: string;
     stars: string;
     forks: string;
+    link: string;
 };
 
 interface FeedProps {
@@ -39,7 +40,7 @@ export default function Feed({ project, onLike, onDislike }: FeedProps){
                 {/* [ADDED] Header with external link */}
                 <div className="flex items-start justify-between gap-3">
                     <h2 className="text-xl font-bold leading-tight text-foreground">{project.title}</h2>
-                    <a href={`https://github.com/${project.title}`} target="_blank" rel="noopener noreferrer"
+                    <a href={project.link || (project.author ? `https://github.com/${project.author}/${project.title}` : `https://github.com/${project.title}`)} target="_blank" rel="noopener noreferrer"
                        className="pointer-events-auto shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                         <ExternalLink className="size-4" />
                     </a>

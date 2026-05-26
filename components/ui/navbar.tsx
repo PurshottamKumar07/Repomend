@@ -1,10 +1,34 @@
+"use client";
+
 // [CHANGED] Complete navbar redesign — glassmorphism, gradient logo, sticky, better CTA
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Code2, Compass, BookmarkCheck, History } from "lucide-react"
+import { clearStoredPreferences, REPOMEND_RESET_EVENT } from "@/lib/preferences"
+import { Code2, Compass, BookmarkCheck, History, RotateCcw } from "lucide-react"
 
 export default function Navbar() {
+  const handleReset = async () => {
+    if (!window.confirm("Reset all preferences and recommendations? This cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/reset", { method: "POST" });
+      if (!response.ok) {
+        console.error("Reset failed:", response.status);
+        window.alert("Failed to reset the recommendation system. Please try again.");
+        return;
+      }
+    } catch (error) {
+      console.error("Reset request failed:", error);
+      window.alert("Failed to reach the server. Please try again.");
+      return;
+    }
+
+    clearStoredPreferences();
+    window.dispatchEvent(new CustomEvent(REPOMEND_RESET_EVENT));
+  };
   return (
     // [CHANGED] Sticky + glassmorphism + subtle bottom border glow
     <nav className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/70 backdrop-blur-xl">
@@ -41,8 +65,18 @@ export default function Navbar() {
           </Link>
         </div>
 
-        {/* [CHANGED] Auth buttons — outline login + gradient sign up */}
+        {/* [CHANGED] Reset + auth buttons */}
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReset}
+            className="gap-1.5 text-muted-foreground"
+          >
+            <RotateCcw className="size-3.5" />
+            Reset
+          </Button>
+          <Separator orientation="vertical" className="h-5" />
           <Button variant="ghost" size="sm">Login</Button>
           <Button
             size="sm"

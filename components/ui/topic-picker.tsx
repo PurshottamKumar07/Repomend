@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,7 +22,6 @@ import {
   Blocks,
   Bot,
   Rocket,
-  Loader2,
 } from "lucide-react";
 
 // Topic categories with icons and curated topics
@@ -251,24 +250,9 @@ interface TopicPickerProps {
 
 export default function TopicPicker({ onComplete }: TopicPickerProps) {
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(TOPIC_CATEGORIES.map((c) => c.name)),
   );
-
-  // Restore any previously saved selections from localStorage
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("userTopicPreferences");
-      if (saved) {
-        const parsed: Record<string, number> = JSON.parse(saved);
-        setSelectedTopics(new Set(Object.keys(parsed)));
-      }
-    } catch {
-      // ignore parse errors
-    }
-  }, []);
 
   const toggleTopic = useCallback((topic: string) => {
     setSelectedTopics((prev) => {
@@ -310,45 +294,12 @@ export default function TopicPicker({ onComplete }: TopicPickerProps) {
     [],
   );
 
-  const handleContinue = useCallback(async () => {
-    // Build the dictionary with score 100 for each selected topic
+  const handleContinue = useCallback(() => {
     const preferences: Record<string, number> = {};
     selectedTopics.forEach((topic) => {
       preferences[topic] = 100;
     });
-    
-    // Persist selections to localStorage
-    try {
-      localStorage.setItem("userTopicPreferences", JSON.stringify(preferences));
-    } catch {
-      // ignore storage errors
-    }
-
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      // POST preferences directly to the backend at localhost:8000
-      const res = await fetch("http://localhost:8000/preferences", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferences }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Backend error ${res.status}: ${text}`);
-      }
-      // On success, clear persisted selections so the picker starts fresh next time
-      localStorage.removeItem("userTopicPreferences");
-      setSelectedTopics(new Set());
-    } catch (err) {
-      console.error("Failed to send preferences to backend:", err);
-      setSubmitError(
-        err instanceof Error ? err.message : "Failed to save preferences.",
-      );
-    } finally {
-      setSubmitting(false);
-      onComplete(preferences);
-    }
+    onComplete(preferences);
   }, [selectedTopics, onComplete]);
 
   return (
@@ -376,11 +327,10 @@ export default function TopicPicker({ onComplete }: TopicPickerProps) {
           <div className="flex items-center gap-3 pt-2">
             <Badge
               variant="outline"
-              className={`gap-1.5 px-3 py-1.5 text-sm transition-all ${
-                selectedTopics.size > 0
+              className={`gap-1.5 px-3 py-1.5 text-sm transition-all ${selectedTopics.size > 0
                   ? "border-primary/50 bg-primary/10 text-primary"
                   : "text-muted-foreground"
-              }`}
+                }`}
             >
               <Zap className="size-3.5" />
               {selectedTopics.size} selected
@@ -412,11 +362,10 @@ export default function TopicPicker({ onComplete }: TopicPickerProps) {
             return (
               <div
                 key={category.name}
-                className={`group rounded-xl border bg-card/50 backdrop-blur-sm transition-all duration-300 hover:shadow-lg ${
-                  someSelected
+                className={`group rounded-xl border bg-card/50 backdrop-blur-sm transition-all duration-300 hover:shadow-lg ${someSelected
                     ? `${category.borderColor} shadow-md`
                     : "border-border/40 hover:border-border/80"
-                }`}
+                  }`}
               >
                 {/* Category header */}
                 <div
@@ -449,11 +398,10 @@ export default function TopicPicker({ onComplete }: TopicPickerProps) {
                       e.stopPropagation();
                       selectAllInCategory(category.topics);
                     }}
-                    className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-                      allSelected
+                    className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${allSelected
                         ? `${category.bgColor} ${category.textColor}`
                         : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                    }`}
+                      }`}
                   >
                     {allSelected ? "Deselect all" : "Select all"}
                   </button>
@@ -468,11 +416,10 @@ export default function TopicPicker({ onComplete }: TopicPickerProps) {
                         <button
                           key={topic}
                           onClick={() => toggleTopic(topic)}
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
-                            isSelected
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-200 ${isSelected
                               ? `${category.borderColor} ${category.bgColor} ${category.textColor} shadow-sm`
                               : "border-border/50 bg-secondary/50 text-muted-foreground hover:border-border hover:bg-secondary hover:text-foreground"
-                          }`}
+                            }`}
                         >
                           {isSelected && (
                             <Check className="size-3 animate-fade-in-up" />
@@ -525,20 +472,11 @@ export default function TopicPicker({ onComplete }: TopicPickerProps) {
             </Button>
             <Button
               onClick={handleContinue}
-              disabled={selectedTopics.size < 3 || submitting}
+              disabled={selectedTopics.size < 3}
               className="gap-2 bg-gradient-to-r from-blue-600 to-violet-600 px-6 text-white shadow-lg shadow-blue-500/20 transition-all hover:from-blue-500 hover:to-violet-500 hover:shadow-xl hover:shadow-blue-500/30 disabled:opacity-50"
             >
-              {submitting ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  Continue
-                  <ChevronRight className="size-4" />
-                </>
-              )}
+              Continue
+              <ChevronRight className="size-4" />
             </Button>
           </div>
         </div>
