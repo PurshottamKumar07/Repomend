@@ -5,7 +5,7 @@ import requests
 
 load_dotenv()
 
-GITHUB_TOKEN=getenv('GITHUB_KEY')
+GITHUB_TOKEN=getenv('GITHUB_KEY') or getenv('GITHUB_TOKEN')
 
 def search_repo(query, per_page=10):
     url= "https://api.github.com/search/repositories"
@@ -17,7 +17,7 @@ def search_repo(query, per_page=10):
 
     params={
         "q": query,
-        "sort": "help-wanted-issues",
+        "sort": "stars",
         "order": "desc",
         "per_page": per_page
     }
@@ -28,7 +28,6 @@ def search_repo(query, per_page=10):
         raise Exception(f"Error:{response.status_code}-{response.text}")
     
     data=response.json()
-
     repo_data=[]
 
     for repo in data["items"]:
