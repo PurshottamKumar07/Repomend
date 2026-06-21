@@ -125,7 +125,7 @@ export default function Container({ className }: React.HTMLAttributes<HTMLDivEle
                         stars: String(item.stars ?? ""),
                         forks: String(item.forks ?? ""),
                         topics: item.language ?? "",
-                        link: item.link,
+                        link: item.link ?? "",
                     };
                 });
                 setProjects(mappedProjects);
