@@ -52,7 +52,6 @@ Now generate the response.
 
     content = response.choices[0].message.content.strip()
 
-    # Try to parse as JSON or Python list
     try:
         cleaned = content.strip()
         # Extract content from markdown code block if present
