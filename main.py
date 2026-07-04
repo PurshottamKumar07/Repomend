@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from ingest import ingest_data, reval_pref
+from ingest import ingest_data, merge_preferences, rescore_existing_projects
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from models import create_tables, mark_all_unseen
@@ -23,6 +23,13 @@ class PreferenceRequest(BaseModel):
     
 load_dotenv()
 
+# Per-process accumulated preferences.  Protected by a lock so that
+# concurrent requests (or background tasks) never see a half-updated dict.
+import threading
+
+_pref_lock = threading.Lock()
+_preferences: dict = {}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_tables()
@@ -44,16 +51,16 @@ app.add_middleware(
 @app.post("/preferences", status_code=202)
 async def save_preferences(data: PreferenceRequest, background_tasks: BackgroundTasks):
     print("Endpoint /preferences called")
-    # Re-score existing projects synchronously so /data is accurate immediately
-    from ingest import reval_pref, cur_pref, rescore_existing_projects
-    reval_pref(cur_pref, data.preferences)
-    rescore_existing_projects(cur_pref)
-    # Fetch new repos from GitHub in the background
-    background_tasks.add_task(ingest, data.preferences)
+
+    with _pref_lock:
+        global _preferences
+        _preferences = merge_preferences(_preferences, data.preferences)
+        snapshot = dict(_preferences)   # immutable copy for the background task
+
+    rescore_existing_projects(snapshot)
+
+    background_tasks.add_task(ingest_data, snapshot)
     return {"message": "Preferences received; existing projects re-scored, background ingestion started."}
-    
-def ingest(preferences):
-    ingest_data(preferences)   
 
 @app.get("/data", response_model=List[Projects])
 def get_feed(limit: int = 10, offset: int = 0):
@@ -98,8 +105,9 @@ def get_feed(limit: int = 10, offset: int = 0):
 @app.post("/reset")
 def reset_recommendations():
     print("Endpoint reset called")
-    from ingest import cur_pref
-    cur_pref.clear()
+    with _pref_lock:
+        global _preferences
+        _preferences = {}
     
     mark_all_unseen()
 

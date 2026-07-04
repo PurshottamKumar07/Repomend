@@ -49,11 +49,3 @@ def mark_all_unseen():
     finally:
         conn.close()
 
-def empty_database():
-    conn=get_conn()
-    cursor=conn.cursor()
-    cursor.execute("DELETE FROM projects")
-    conn.commit()
-    conn.close()
-
-empty_database()
