@@ -15,6 +15,7 @@ def create_tables():
         language TEXT,
         score REAL,
         created_at TEXT,
+        liked INTEGER DEFAULT 0,
         sent_to_frontend INTEGER NOT NULL DEFAULT 0
     )
     """)
@@ -27,6 +28,10 @@ def create_tables():
     if 'sent_to_frontend' not in columns:
         cursor.execute(
             "ALTER TABLE projects ADD COLUMN sent_to_frontend INTEGER NOT NULL DEFAULT 0"
+        )
+    if 'liked' not in columns:
+        cursor.execute(
+            "ALTER TABLE projects ADD COLUMN liked INTEGER DEFAULT 0"
         )
 
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_score ON projects(score DESC)")
@@ -48,4 +53,3 @@ def mark_all_unseen():
         conn.commit()
     finally:
         conn.close()
-
