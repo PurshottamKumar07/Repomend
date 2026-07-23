@@ -29,12 +29,12 @@ export default function Navbar() {
     clearStoredPreferences();
     window.dispatchEvent(new CustomEvent(REPOMEND_RESET_EVENT));
   };
+  
   return (
     // [CHANGED] Sticky + glassmorphism + subtle bottom border glow
     <nav className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/70 backdrop-blur-xl">
       <div className="container mx-auto flex h-14 items-center justify-between px-6">
 
-        {/* [CHANGED] Logo — gradient text + code icon */}
         <Link href="/" className="flex items-center gap-2 group">
           <Code2 className="size-5 text-primary transition-transform group-hover:rotate-12" />
           <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-600">Repomend</span>
@@ -42,13 +42,16 @@ export default function Navbar() {
 
         {/* [CHANGED] Nav links — with icons, pill hover effect */}
         <div className="flex items-center gap-1">
+        <div>
           <Link
             href="/"
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <Compass className="size-3.5" />
-            Discover
+            Feed
           </Link>
+        </div>
+        <div>
           <Link
             href="/saved"
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -56,13 +59,7 @@ export default function Navbar() {
             <BookmarkCheck className="size-3.5" />
             Saved
           </Link>
-          <Link
-            href="/history"
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <History className="size-3.5" />
-            History
-          </Link>
+        </div>
         </div>
 
         {/* [CHANGED] Reset + auth buttons */}
@@ -76,16 +73,17 @@ export default function Navbar() {
             <RotateCcw className="size-3.5" />
             Reset
           </Button>
-          <Separator orientation="vertical" className="h-5" />
-          <Button variant="ghost" size="sm">Login</Button>
+          <Button variant="ghost" size="sm" render={<Link href="/login" />}>
+            Login
+          </Button>
           <Button
             size="sm"
             className="bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20"
+            render={<Link href="/signup" />}
           >
             Sign Up
           </Button>
         </div>
-
       </div>
     </nav>
   )
