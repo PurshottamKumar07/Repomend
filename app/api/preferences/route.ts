@@ -15,7 +15,6 @@ export async function POST(request: Request) {
 
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
 
-    // Forward the preferences dictionary to the backend
     const response = await fetch(`${backendUrl}/preferences`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -24,7 +23,6 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       console.error('Backend responded with:', response.status);
-      // Still return success to the client — preferences were recorded on the frontend side
       return NextResponse.json({
         success: true,
         synced: false,
@@ -42,7 +40,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Preferences API error:', error);
-    // Graceful degradation: don't block the user even if the backend is down
     return NextResponse.json({
       success: true,
       synced: false,

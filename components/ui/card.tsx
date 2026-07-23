@@ -1,4 +1,3 @@
-// [ADDED] Shadcn Card component — used for liked/disliked panels and project card
 import * as React from "react"
 import { cn } from "@/lib/utils"
 

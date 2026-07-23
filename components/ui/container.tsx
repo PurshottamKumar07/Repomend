@@ -11,8 +11,15 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Feed, { Project } from "./feed"
-import TopicPicker from "./topic-picker"
-import { ThumbsDown, ThumbsUp, RotateCcw, ArrowLeft, ArrowRight, RefreshCw, Loader2 } from "lucide-react"
+import TopicPicker from "./topic-picker" 
+import { ThumbsDown, ThumbsUp, RotateCcw, ArrowLeft, ArrowRight, Loader2 } from "lucide-react"
+
+// How many projects to fetch per batch
+const BATCH_SIZE = 10;
+// Trigger the next fetch when this many projects remain in the queue
+const PREFETCH_THRESHOLD = 3;
+// localStorage key shared with the Saved page
+const LIKED_STORAGE_KEY = "repomend_liked";
 
 function appendUniqueProject(list: Project[], project: Project): Project[] {
     if (list.some((p) => p.id === project.id)) return list;
@@ -36,11 +43,16 @@ export default function Container({ className }: React.HTMLAttributes<HTMLDivEle
     const [preferences, setPreferences] = useState<Record<string, number> | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
+    // Subtle spinner while appending the next batch (does not block the UI)
+    const [isFetchingMore, setIsFetchingMore] = useState(false);
+    // False once the backend signals there are no more projects
+    const [hasMore, setHasMore] = useState(true);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [liked, setLiked] = useState<Project[]>([]);
     const [disliked, setDisliked] = useState<Project[]>([]);
     const [history, setHistory] = useState<{ action: 'like' | 'dislike', project: Project }[]>([]);
     const [viewingProject, setViewingProject] = useState<Project | null>(null);
+    
 
     // [ADDED] Handle topic selection completion
     const handleTopicComplete = useCallback((prefs: Record<string, number>) => {
@@ -67,6 +79,10 @@ export default function Container({ className }: React.HTMLAttributes<HTMLDivEle
     };
 
     const didInitialFetch = useRef(false);
+    // Tracks the next offset to send to the backend — updated after every successful fetch
+    const fetchOffset = useRef(0);
+    // Guard against concurrent fetches (e.g. rapid swiping near the threshold)
+    const isFetching = useRef(false);
 
     useEffect(() => {
         const saved = getStoredPreferences();
@@ -83,66 +99,134 @@ export default function Container({ className }: React.HTMLAttributes<HTMLDivEle
             setViewingProject(null);
             setCurrentIndex(0);
             setLoading(false);
+            setHasMore(true);
             didInitialFetch.current = false;
+            fetchOffset.current = 0;
+            isFetching.current = false;
+            try { localStorage.removeItem(LIKED_STORAGE_KEY); } catch { /* ignore */ }
         };
 
         window.addEventListener(REPOMEND_RESET_EVENT, handleReset);
         return () => window.removeEventListener(REPOMEND_RESET_EVENT, handleReset);
     }, []);
 
-    const fetchProjects = useCallback(async () => {
+    // Persist liked array to localStorage so the Saved page can read it
+    useEffect(() => {
+        try {
+            localStorage.setItem(LIKED_STORAGE_KEY, JSON.stringify(liked));
+        } catch { /* ignore quota / private mode errors */ }
+    }, [liked]);
+
+    // Shared mapper so it's not duplicated between initial and subsequent fetches
+    const mapProject = (item: {
+        id: number;
+        title: string;
+        description?: string;
+        stars?: number | string;
+        forks?: number | string;
+        language?: string;
+        author?: string;
+        link?: string;
+    }): Project => {
+        const linkUrl = item.link ?? "";
+        const extractedAuthor = linkUrl ? linkUrl.split("/")[3] : "";
+        return {
+            id: item.id,
+            title: item.title,
+            author: item.author || extractedAuthor || "",
+            description: item.description ?? "",
+            stars: String(item.stars ?? ""),
+            forks: String(item.forks ?? ""),
+            topics: item.language ?? "",
+            link: item.link ?? "",
+        };
+    };
+
+    /**
+     * fetchProjects — unified fetch used for both the initial load and
+     * auto-prefetch batches. Always syncs the latest preferences first so
+     * the backend can re-rank before returning results.
+     *
+     * @param isInitial  true on first call — shows the full-screen loader
+     *                   and resets the project list instead of appending.
+     */
+    const fetchProjects = useCallback(async (isInitial = false) => {
+        if (isFetching.current) return;
         const prefs = getStoredPreferences();
         if (!prefs) return;
 
+        isFetching.current = true;
+
         try {
-            setLoading(true);
+            if (isInitial) {
+                setLoading(true);
+            } else {
+                setIsFetchingMore(true);
+            }
+
+            // Always push updated preferences BEFORE fetching the next batch
+            // so the backend re-ranks based on the user's latest like/dislike signals.
             await fetch("/api/preferences", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ preferences: prefs }),
             });
 
-            const response = await fetch("/api/projects?limit=10");
+            const offset = fetchOffset.current;
+            const response = await fetch(`/api/projects?limit=${BATCH_SIZE}&offset=${offset}`);
             const data = await response.json();
+
             if (Array.isArray(data)) {
-                const mappedProjects: Project[] = data.map((item: {
-                    id: number;
-                    title: string;
-                    description?: string;
-                    stars?: number | string;
-                    forks?: number | string;
-                    language?: string;
-                    author?: string;
-                    link?: string;
-                }) => {
-                    const linkUrl = item.link ?? "";
-                    const extractedAuthor = linkUrl ? linkUrl.split("/")[3] : "";
-                    return {
-                        id: item.id,
-                        title: item.title,
-                        author: item.author || extractedAuthor || "",
-                        description: item.description ?? "",
-                        stars: String(item.stars ?? ""),
-                        forks: String(item.forks ?? ""),
-                        topics: item.language ?? "",
-                        link: item.link ?? "",
-                    };
-                });
-                setProjects(mappedProjects);
+                if (data.length === 0) {
+                    // Backend has no more projects to offer
+                    setHasMore(false);
+                } else {
+                    const mappedProjects = data.map(mapProject);
+                    fetchOffset.current = offset + data.length;
+
+                    if (isInitial) {
+                        setProjects(mappedProjects);
+                    } else {
+                        // Append new batch, deduplicating by id
+                        setProjects(prev => {
+                            const existingIds = new Set(prev.map(p => p.id));
+                            const fresh = mappedProjects.filter(p => !existingIds.has(p.id));
+                            return [...prev, ...fresh];
+                        });
+                    }
+
+                    if (data.length < BATCH_SIZE) {
+                        // Received fewer than requested — no more pages
+                        setHasMore(false);
+                    }
+                }
             }
         } catch (error) {
             console.error("Failed to fetch projects:", error);
         } finally {
             setLoading(false);
+            setIsFetchingMore(false);
+            isFetching.current = false;
         }
     }, []);
 
+    // Initial fetch — fires once when preferences are first available
     useEffect(() => {
         if (preferences === null) return;
         if (didInitialFetch.current) return;
         didInitialFetch.current = true;
-        fetchProjects();
+        fetchProjects(true);
     }, [preferences, fetchProjects]);
+
+    // Auto-prefetch — fires when the user is PREFETCH_THRESHOLD projects from the end
+    useEffect(() => {
+        if (!didInitialFetch.current) return;
+        if (!hasMore) return;
+        const remaining = projects.length - currentIndex;
+        if (remaining <= PREFETCH_THRESHOLD) {
+            fetchProjects(false);
+        }
+    }, [currentIndex, projects.length, hasMore, fetchProjects]);
 
     const currentProject = projects[currentIndex] || null;
     const projectToDisplay = viewingProject || currentProject;
@@ -273,7 +357,7 @@ export default function Container({ className }: React.HTMLAttributes<HTMLDivEle
 
                     {/* [CHANGED] Center card — main project display with floating animation + gradient border */}
                     <div className="flex-1 min-w-0 flex flex-col gap-3">
-                        {/* [ADDED] Progress bar */}
+                        {/* Progress bar + subtle fetching-more indicator */}
                         {!loading && projects.length > 0 && (
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                 <div className="flex-1 h-1 rounded-full bg-secondary overflow-hidden">
@@ -283,6 +367,9 @@ export default function Container({ className }: React.HTMLAttributes<HTMLDivEle
                                     />
                                 </div>
                                 <span>{currentIndex}/{projects.length}</span>
+                                {isFetchingMore && (
+                                    <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                                )}
                             </div>
                         )}
 
@@ -297,15 +384,17 @@ export default function Container({ className }: React.HTMLAttributes<HTMLDivEle
                                         </div>
                                     ) : projectToDisplay ? (
                                         <Feed project={projectToDisplay} onLike={handleLike} onDislike={handleDislike} />
+                                    ) : isFetchingMore ? (
+                                        // Next batch is loading in the background — show a gentle spinner
+                                        <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                                            <Loader2 className="size-6 animate-spin text-primary" />
+                                            <p className="text-sm font-medium animate-pulse">Finding more repos...</p>
+                                        </div>
                                     ) : (
-                                        // [CHANGED] Better empty state with refresh button
-                                        <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
+                                        // Truly nothing left — backend confirmed no more pages
+                                        <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
                                             <p className="text-lg font-medium">All caught up! 🎉</p>
-                                            <p className="text-sm">You&apos;ve reviewed all available projects.</p>
-                                            <Button variant="outline" onClick={() => { setCurrentIndex(0); fetchProjects(); }} className="gap-2">
-                                                <RefreshCw className="size-4" />
-                                                Load More
-                                            </Button>
+                                            <p className="text-sm opacity-60">You&apos;ve explored everything we have for now.</p>
                                         </div>
                                     )}
                                 </div>
